@@ -1,0 +1,23 @@
+{
+  "name": "postman-agent-generator-mcp",
+  "version": "1.0.0",
+  "description": "A simple MCP server with packaged tools",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "list-tools": "node index.js tools"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.9.0",
+    "commander": "^13.1.0",
+    "dotenv": "^16.4.7",
+    "express": "^5.1.0",
+    "node-fetch": "^3.3.2",
+    "sarvamai": "^0.1.1"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "author": "Postman, Inc.",
+  "license": "MIT"
+}
