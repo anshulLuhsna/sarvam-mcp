@@ -8,17 +8,30 @@ import { SarvamAIClient } from 'sarvamai';
  * @param {Object} args - Arguments for the text-to-speech conversion.
  * @param {string} args.inputs - The text input(s) to be converted to speech.
  * @param {string} [args.target_language_code="hi-IN"] - The target language code for the speech.
- * @param {string} [args.speaker="meera"] - The speaker's name for the voice.
+ * @param {string} [args.speaker="meera"] - The speaker\'s name for the voice.
  * @param {number} [args.pitch=0] - The pitch of the speech.
  * @param {number} [args.pace=1.65] - The pace of the speech.
  * @param {number} [args.loudness=1.5] - The loudness of the speech.
  * @param {number} [args.speech_sample_rate=8000] - The sample rate for the speech.
  * @param {boolean} [args.enable_preprocessing=true] - Whether to enable preprocessing.
  * @param {string} [args.model="bulbul:v1"] - The model to be used for conversion.
- * @param {string} [args.output_path] - Optional. Full path (including filename and .wav extension) where the audio file should be saved. If provided, the audio will be saved to this path. If not, the raw API response with base64 audio will be returned.
- * @returns {Promise<Object|string>} - If output_path is provided and saving is successful, returns a success message string. Otherwise, returns the JSON response from Sarvam API or an error object.
+ * @param {string} [args.output_path] - Optional. Full path (including filename and .wav extension) where the audio file should be saved. If provided, audio is saved to this explicit path. Takes precedence over save_response.
+ * @param {boolean} [args.save_response] - Optional. If true and output_path is not provided, the audio will be saved to a default location (e.g., ./responses/text-to-speech/tts_audio_[timestamp].wav).
+ * @returns {Promise<Object|string>} - If audio is saved, returns a success message string. Otherwise, returns the JSON response from Sarvam API or an error object.
  */
-const executeFunction = async ({ inputs, target_language_code = 'hi-IN', speaker = 'meera', pitch = 0, pace = 1.65, loudness = 1.5, speech_sample_rate = 8000, enable_preprocessing = true, model = 'bulbul:v1', output_path }) => {
+const executeFunction = async ({
+  inputs,
+  target_language_code = 'hi-IN',
+  speaker = 'meera',
+  pitch = 0,
+  pace = 1.65,
+  loudness = 1.5,
+  speech_sample_rate = 8000,
+  enable_preprocessing = true,
+  model = 'bulbul:v1',
+  output_path,
+  save_response
+}) => {
   const apiKey = process.env.SARVAM_API_KEY;
 
   if (!apiKey) {
@@ -46,29 +59,39 @@ const executeFunction = async ({ inputs, target_language_code = 'hi-IN', speaker
       model
     });
 
-    // If output_path is provided, save the audio and return success message or error
-    if (output_path) {
-      if (typeof output_path !== 'string' || !output_path.trim()) {
+    let determinedOutputPath = output_path; // User-specified path takes precedence
+
+    if (!determinedOutputPath && save_response === true) {
+      // If output_path is not given, but save_response is true, generate a default path
+      const defaultDir = path.join(process.cwd(), 'responses', 'text-to-speech');
+      if (!fs.existsSync(defaultDir)) {
+        fs.mkdirSync(defaultDir, { recursive: true });
+      }
+      const timestamp = new Date().toISOString().replace(/:/g, '-').replace(/\.\d+Z$/, 'Z');
+      const defaultFilename = `tts_audio_${timestamp}.wav`;
+      determinedOutputPath = path.join(defaultDir, defaultFilename);
+    }
+
+    if (determinedOutputPath) {
+      if (typeof determinedOutputPath !== 'string' || !determinedOutputPath.trim()) {
         return {
-          error: 'Invalid output_path',
-          details: 'output_path must be a non-empty string if provided.'
+          error: 'Invalid output_path determined',
+          details: 'The determined output_path must be a non-empty string.'
         };
       }
       try {
         if (response.audios && response.audios.length > 0) {
-          const outputDir = path.dirname(output_path);
-          if (!fs.existsSync(outputDir)) {
-            fs.mkdirSync(outputDir, { recursive: true });
+          const outputDirForSave = path.dirname(determinedOutputPath);
+          if (!fs.existsSync(outputDirForSave)) {
+            fs.mkdirSync(outputDirForSave, { recursive: true });
           }
 
           const combinedAudio = response.audios.join('');
           const audioBuffer = Buffer.from(combinedAudio, 'base64');
           
-          // Assuming WAV output based on previous implementation and common use case
-          // If other formats are possible from Sarvam and desired, this might need adjustment
-          writeWav(audioBuffer, output_path, speech_sample_rate, 1, 16);
+          writeWav(audioBuffer, determinedOutputPath, speech_sample_rate, 1, 16); // Assuming 1 channel, 16 bit depth
           
-          return `Successfully saved to ${output_path}`;
+          return `Successfully saved to ${determinedOutputPath}`;
         } else {
           return {
             error: 'No audio data received from API to save.',
@@ -76,22 +99,21 @@ const executeFunction = async ({ inputs, target_language_code = 'hi-IN', speaker
           };
         }
       } catch (saveError) {
-        console.error(`Error saving audio to ${output_path}:`, saveError);
+        console.error(`Error saving audio to ${determinedOutputPath}:`, saveError);
         return {
           error: 'Failed to save audio to specified path.',
           details: saveError.message,
-          specified_path: output_path
+          specified_path: determinedOutputPath
         };
       }
     } else {
-      // If output_path is NOT provided, return the full API response
+      // If no output_path is determined (neither user-provided nor default generated due to save_response), return full API response
       return response;
     }
   } catch (error) {
     console.error('Error converting text to speech:', error);
-    // Ensure the error object from the main catch is consistent
     let errorDetails = error.toString();
-    if (error.response && error.response.data) { // Attempt to get more specific error from Sarvam SDK if available
+    if (error.response && error.response.data) {
       errorDetails = JSON.stringify(error.response.data);
     }
     return {
@@ -110,7 +132,7 @@ function writeWav(pcmBuffer, filename, sampleRate, numChannels, bitDepth) {
 
 // Create a WAV file header
 function createWavHeader(dataLength, sampleRate, numChannels, bitDepth) {
-  const blockAlign = numChannels * bitDepth / 8;
+  const blockAlign = numChannels * (bitDepth / 8); // Corrected calculation for bitDepth
   const byteRate = sampleRate * blockAlign;
   const buffer = Buffer.alloc(44);
   buffer.write('RIFF', 0);
@@ -139,7 +161,7 @@ const apiTool = {
     type: 'function',
     function: {
       name: 'text_to_speech',
-      description: 'Convert text inputs to speech using Sarvam API. If output_path is provided, saves audio to file and returns success message. Otherwise, returns API response with base64 audio.',
+      description: 'Convert text inputs to speech using Sarvam API. Handles explicit output_path or saves to a default location if save_response is true. Otherwise, returns API response with base64 audio.',
       parameters: {
         type: 'object',
         properties: {
@@ -153,7 +175,7 @@ const apiTool = {
           },
           speaker: {
             type: 'string',
-            description: 'The speaker\'s name for the voice. Default: meera'
+            description: "The speaker\'s name for the voice. Default: meera"
           },
           pitch: {
             type: 'number',
@@ -177,14 +199,18 @@ const apiTool = {
           },
           model: {
             type: 'string',
-            description: 'The model to be used for conversion. Default: bulbul:v1'
+            description: "The model to be used for conversion. Default: bulbul:v1"
           },
           output_path: {
             type: 'string',
-            description: 'Optional. Full path (including filename and .wav extension) where the audio file should be saved. If provided, audio is saved and a success message is returned. If omitted, the raw API response with base64 audio is returned.'
+            description: 'Optional. Full path (including filename and .wav extension) where the audio file should be saved. If provided, audio is saved to this explicit path. Takes precedence over save_response.'
+          },
+          save_response: {
+            type: 'boolean',
+            description: 'Optional. If true and output_path is not provided, the audio will be saved to a default location (e.g., ./responses/text-to-speech/tts_audio_[timestamp].wav). Defaults to false if not specified.'
           }
         },
-        required: ['inputs'] // output_path is not required
+        required: ['inputs']
       }
     }
   }
