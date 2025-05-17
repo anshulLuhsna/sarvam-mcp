@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path_module from 'path'; // Using path_module to avoid conflict with path variable
+import { fileURLToPath } from 'url'; // ADDED
 
 /**
  * Retrieves the full content of the most relevant Sarvam AI markdown documentation file
@@ -19,43 +20,59 @@ const executeSarvamDocsFileRetrieval = async ({ search_term, doc_area }, context
     console.warn('Warning: Tool execution context was not provided. This tool might rely on it for other operations.');
   }
 
+  // --- MODIFIED PATH RESOLUTION --- 
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path_module.dirname(__filename);
+  // projectRoot is two levels up from the current script's directory (tools/sarvam-api/)
+  const projectRoot = path_module.resolve(__dirname, '../../'); 
+  const docsRootDir = path_module.join(projectRoot, 'docs');
+  // --- END MODIFIED PATH RESOLUTION ---
+
   const allCandidateFiles = [];
-  const searchPaths = [];
-  // Assuming workspace root is where mcpServer.js is. Docs are relative to this.
-  const workspaceRoot = process.cwd(); 
-  const defaultSearchAreas = ['docs/api-ref', 'docs/cookbook', 'docs/docs-section'];
+  const searchPaths = []; 
+  const defaultSearchSubDirs = ['api-ref', 'cookbook', 'docs-section']; // These are subdirs of docsRootDir
 
   if (doc_area) {
-    searchPaths.push(doc_area.startsWith('docs/') ? doc_area : `docs/${doc_area}`);
+    // If doc_area is provided, treat it as a subdirectory relative to docsRootDir
+    // or a path that might start with 'docs/' relative to projectRoot
+    if (doc_area.startsWith('docs/')) { // e.g. user provided "docs/custom-area"
+        searchPaths.push(path_module.join(projectRoot, doc_area));
+    } else { // e.g. user provided "api-ref" or "custom-area"
+        searchPaths.push(path_module.join(docsRootDir, doc_area));
+    }
   } else {
-    searchPaths.push(...defaultSearchAreas);
+    for (const subDir of defaultSearchSubDirs) {
+        searchPaths.push(path_module.join(docsRootDir, subDir));
+    }
   }
 
-  console.log('Searching in relative paths:', searchPaths);
+  console.log('Searching in absolute paths:', searchPaths);
 
-  for (const relativeDocPath of searchPaths) {
-    const absoluteDocPath = path_module.resolve(workspaceRoot, relativeDocPath);
+  for (const absoluteDocPath of searchPaths) {
     try {
       if (!fs.existsSync(absoluteDocPath) || !fs.lstatSync(absoluteDocPath).isDirectory()){
         console.warn(`Search path ${absoluteDocPath} does not exist or is not a directory. Skipping.`);
         continue;
       }
       const filesInDir = fs.readdirSync(absoluteDocPath);
+      // Store paths relative to docsRootDir for easier handling later
+      const pathSuffix = path_module.relative(docsRootDir, absoluteDocPath);
+
       const mdFiles = filesInDir
         .filter(file => file.endsWith('.md'))
-        .map(file => path_module.join(relativeDocPath, file).replace(/\\/g, '/')); // Use original relative path for consistency + normalize slashes
+        .map(file => path_module.join(pathSuffix, file).replace(/\\/g, '/')); // Normalize slashes
       allCandidateFiles.push(...mdFiles);
     } catch (error) {
       console.error(`Error reading directory ${absoluteDocPath}:`, error.message);
-      if (doc_area) { // If a specific doc_area was requested and fails, report more critically
+      if (doc_area) { 
         return {
             retrieved_file_path: null,
             file_content: null,
-            status_message: `Failed to list directory for specified doc_area: ${relativeDocPath}. Error: ${error.message}`,
+            status_message: `Failed to list directory for specified doc_area: ${absoluteDocPath}. Error: ${error.message}`,
             error_message: error.message
         };
       }
-      console.warn(`Could not list directory ${relativeDocPath}, continuing...`);
+      // console.warn(`Could not list directory ${absoluteDocPath}, continuing...`); // Can be noisy
     }
   }
 
@@ -63,12 +80,12 @@ const executeSarvamDocsFileRetrieval = async ({ search_term, doc_area }, context
     return {
       retrieved_file_path: null,
       file_content: null,
-      status_message: `No .md files found in the searched documentation areas: ${searchPaths.join(', ')}.`,
+      status_message: `No .md files found in the searched documentation areas: ${searchPaths.map(p => path_module.relative(projectRoot, p)).join(', ')}. Searched absolute paths: ${searchPaths.join(', ')}`,
       error_message: null
     };
   }
   const uniqueCandidateFiles = [...new Set(allCandidateFiles)];
-  console.log('Unique candidate .md files:', uniqueCandidateFiles);
+  console.log('Unique candidate .md files (relative to docs root):', uniqueCandidateFiles);
 
   const normalizedSearchTerm = search_term.toLowerCase().trim();
   let bestMatch = null;
@@ -77,40 +94,46 @@ const executeSarvamDocsFileRetrieval = async ({ search_term, doc_area }, context
       searchKeywords.push(normalizedSearchTerm);
   }
 
-  // --- File Selection Logic ---
+  // --- File Selection Logic (paths are relative to docsRootDir) ---
 
   // Strategy 1: Filename matching (prioritized)
   if (normalizedSearchTerm.endsWith('.md')) {
-    const exactMatchByPath = uniqueCandidateFiles.find(file => file.toLowerCase().endsWith(`/${normalizedSearchTerm}`));
+    const exactMatchByPath = uniqueCandidateFiles.find(fileRelToDocs => fileRelToDocs.toLowerCase() === normalizedSearchTerm || fileRelToDocs.toLowerCase().endsWith(`/${normalizedSearchTerm}`));
     if (exactMatchByPath) {
       bestMatch = { file: exactMatchByPath, score: Infinity, type: 'exact_filename_match' }; 
-      console.log('Found exact filename match (by path ending):', bestMatch.file);
+      console.log('Found exact filename match (relative to docs root):', bestMatch.file);
     } else {
-        // Check if the search term is just the filename itself, without the preceding path parts
         const justTheFilename = normalizedSearchTerm.substring(normalizedSearchTerm.lastIndexOf('/') + 1);
-        const exactMatchBySimpleName = uniqueCandidateFiles.find(file => path_module.basename(file).toLowerCase() === justTheFilename);
+        const exactMatchBySimpleName = uniqueCandidateFiles.find(fileRelToDocs => path_module.basename(fileRelToDocs).toLowerCase() === justTheFilename);
         if (exactMatchBySimpleName){
             bestMatch = { file: exactMatchBySimpleName, score: Infinity, type: 'exact_filename_match' }; 
-            console.log('Found exact filename match (by simple name):', bestMatch.file);
+            console.log('Found exact filename match (by simple name, relative to docs root):', bestMatch.file);
         }
     }
   }
 
-  // Strategy 2: Keyword matching in filenames (if no exact .md match or search term is not a filename)
+  // Strategy 2: Keyword matching in filenames and paths
   if (!bestMatch) {
-    let scoredFiles = uniqueCandidateFiles.map(file => {
-      const filename = path_module.basename(file).toLowerCase();
+    let scoredFiles = uniqueCandidateFiles.map(fileRelToDocs => {
+      const filename = path_module.basename(fileRelToDocs).toLowerCase();
       let score = 0;
       for (const keyword of searchKeywords) {
         if (filename.includes(keyword)) {
-          score += 10; // Weight for filename keyword match
+          score += 10; 
         }
       }
-      // Bonus for matching more of the search term as a whole phrase in filename
       if (!normalizedSearchTerm.endsWith('.md') && filename.includes(normalizedSearchTerm)) {
-        score += 20 * searchKeywords.length; // Strong bonus for full phrase match in filename
+        score += 20 * searchKeywords.length; 
       }
-      return { file, score, type: 'keyword_filename_match' };
+      const pathParts = fileRelToDocs.split('/').slice(0, -1); // directory parts
+      for (const part of pathParts) {
+          for (const keyword of searchKeywords) {
+              if (part.toLowerCase().includes(keyword)) {
+                  score +=5; 
+              }
+          }
+      }
+      return { file: fileRelToDocs, score, type: 'keyword_filename_path_match' };
     });
 
     scoredFiles = scoredFiles.filter(f => f.score > 0);
@@ -118,73 +141,68 @@ const executeSarvamDocsFileRetrieval = async ({ search_term, doc_area }, context
 
     if (scoredFiles.length > 0) {
       bestMatch = scoredFiles[0];
-      console.log('Top filename keyword match:', bestMatch.file, 'Score:', bestMatch.score);
+      console.log('Top filename/path keyword match (relative to docs root):', bestMatch.file, 'Score:', bestMatch.score);
     }
-  }
-  
+  }  
+
   // Strategy 3: Keyword matching in file content 
-  // If no good match from filenames or if the match is weak, try content search.
-  // Let's define a "weak" filename match score, e.g., less than 20 (adjust as needed)
   const weakFilenameMatchScore = 20;
   if (!bestMatch || bestMatch.score < weakFilenameMatchScore) {
     console.log('Filename match was weak or non-existent, proceeding to content search.');
     let contentScoredFiles = [];
     const filesToSearchContent = bestMatch ? [bestMatch.file, ...uniqueCandidateFiles.filter(f => f !== bestMatch.file)] : uniqueCandidateFiles;
 
-    for (const filePath of filesToSearchContent) {
+    for (const fileRelToDocs of filesToSearchContent) {
       try {
-        const absoluteFilePath = path_module.resolve(workspaceRoot, filePath);
-        if (!fs.existsSync(absoluteFilePath)) continue;
+        const absoluteFilePath = path_module.join(docsRootDir, fileRelToDocs); // Path relative to docsRootDir
+        if (!fs.existsSync(absoluteFilePath)) {
+            console.warn(`Content search: File ${absoluteFilePath} not found, skipping.`);
+            continue;
+        }
 
         const fileContent = fs.readFileSync(absoluteFilePath, 'utf-8').toLowerCase();
         let contentScore = 0;
         for (const keyword of searchKeywords) {
           if (fileContent.includes(keyword)) {
-            contentScore += 1; // Simple count for now
+            contentScore += 1;
           }
         }
-        // Bonus for full phrase match in content
         if (fileContent.includes(normalizedSearchTerm)) {
-          contentScore += 5 * searchKeywords.length; // Bonus for phrase match
+          contentScore += 5 * searchKeywords.length;
         }
 
         if (contentScore > 0) {
-            // If this file was already scored by filename, add to its score or take the higher one?
-            // For now, let's just take the content score if it's better or if the file wasn't the filename bestMatch
             let existingScore = 0;
-            if (bestMatch && filePath === bestMatch.file) {
+            if (bestMatch && fileRelToDocs === bestMatch.file) {
                 existingScore = bestMatch.score;
             }
-            // Simple strategy: if content score is higher, or if it's a new file being scored
-            contentScoredFiles.push({ file: filePath, score: existingScore + contentScore, type: 'content_match' });
+            contentScoredFiles.push({ file: fileRelToDocs, score: existingScore + contentScore, type: 'content_match' });
         }
       } catch (err) {
-        console.warn(`Could not read or score content for ${filePath}: ${err.message}`);
+        console.warn(`Could not read or score content for ${fileRelToDocs}: ${err.message}`);
       }
     }
 
     if (contentScoredFiles.length > 0) {
-        contentScoredFiles.sort((a, b) => b.score - a.score); // Sort by combined score
+        contentScoredFiles.sort((a, b) => b.score - a.score);
         const topContentMatch = contentScoredFiles[0];
-        // Decide if this content match is better than a previous weak filename match
         if (!bestMatch || topContentMatch.score > bestMatch.score) {
             bestMatch = topContentMatch;
-            console.log('Top content match selected:', bestMatch.file, 'Score:', bestMatch.score);
+            console.log('Top content match selected (relative to docs root):', bestMatch.file, 'Score:', bestMatch.score);
         }
     }
   }
 
-  // Fallback: if only one candidate file and no strong match, select it (already partially handled)
   if (!bestMatch && uniqueCandidateFiles.length === 1 && normalizedSearchTerm.length > 0) {
       bestMatch = { file: uniqueCandidateFiles[0], score: 1, type: 'single_candidate_fallback' }; 
-      console.log('Only one candidate file and no strong matches, selecting it as a fallback:', bestMatch.file);
+      console.log('Only one candidate file and no strong matches, selecting it as a fallback (relative to docs root):', bestMatch.file);
   }
   
   if (!bestMatch) {
     return {
       retrieved_file_path: null,
       file_content: null,
-      status_message: `No relevant file found for "${search_term}" in areas: ${searchPaths.join(', ')}. Please try different keywords or check filenames.`,
+      status_message: `No relevant file found for "${search_term}" in areas: ${searchPaths.map(p => path_module.relative(projectRoot, p)).join(', ')}. Please try different keywords or check filenames.`,
       error_message: null
     };
   }
@@ -192,14 +210,14 @@ const executeSarvamDocsFileRetrieval = async ({ search_term, doc_area }, context
   let retrievedFileContent = null;
   let statusMessage = '';
   let errorMessage = null;
-  let absoluteBestMatchPath = path_module.resolve(workspaceRoot, bestMatch.file);
+  let absoluteBestMatchPath = path_module.join(docsRootDir, bestMatch.file); // Path relative to docsRootDir
 
   try {
     if (!fs.existsSync(absoluteBestMatchPath)) {
         throw new Error(`File ${bestMatch.file} (resolved to ${absoluteBestMatchPath}) not found.`);
     }
     retrievedFileContent = fs.readFileSync(absoluteBestMatchPath, 'utf-8');
-    statusMessage = `Successfully retrieved documentation file: ${bestMatch.file}`;
+    statusMessage = `Successfully retrieved documentation file: ${bestMatch.file} (relative to docs root)`;
     console.log('Successfully read file:', bestMatch.file);
 
   } catch (error) {
@@ -209,7 +227,7 @@ const executeSarvamDocsFileRetrieval = async ({ search_term, doc_area }, context
   }
 
   return {
-    retrieved_file_path: errorMessage ? null : bestMatch.file, // Return the relative path
+    retrieved_file_path: errorMessage ? null : bestMatch.file, // Return path relative to docsRootDir
     file_content: retrievedFileContent,
     status_message: statusMessage,
     error_message: errorMessage
