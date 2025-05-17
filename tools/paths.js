@@ -1,11 +1,11 @@
 export const toolPaths = [
-  'sarvam-api/sarvam-ap-is/speech-to-text.js',
-  'sarvam-api/sarvam-ap-is/text-to-speech.js',
-  'sarvam-api/sarvam-ap-is/speech-to-text-translate.js',
-  'sarvam-api/sarvam-ap-is/call-analytics.js',
-  'sarvam-api/sarvam-ap-is/translate.js',
-  'sarvam-api/sarvam-ap-is/language-identification.js',
-  'sarvam-api/sarvam-ap-is/text-analytics.js',
-  'sarvam-api/sarvam-ap-is/transliterate-text.js',
-  'sarvam-api/sarvam-ap-is/sarvam-docs-file-retriever.js'
+  'sarvam-api/speech-to-text.js',
+  'sarvam-api/text-to-speech.js',
+  'sarvam-api/speech-to-text-translate.js',
+  'sarvam-api/call-analytics.js',
+  'sarvam-api/translate.js',
+  'sarvam-api/language-identification.js',
+  'sarvam-api/text-analytics.js',
+  'sarvam-api/transliterate-text.js',
+  'sarvam-api/sarvam-docs-file-retriever.js'
 ];
