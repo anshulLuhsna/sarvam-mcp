@@ -1,6 +1,6 @@
 {
   "name": "sarvam-mcp",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "An MCP server exposing Sarvam AI tools and a documentation retriever.",
   "main": "mcpServer.js",
   "type": "module",
