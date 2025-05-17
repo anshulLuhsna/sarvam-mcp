@@ -13,11 +13,11 @@ import { fileURLToPath } from 'url'; // ADDED
  * @returns {Promise<Object>} - An object containing the retrieved file path, content, and status.
  */
 const executeSarvamDocsFileRetrieval = async ({ search_term, doc_area }, context) => {
-  console.log(`Executing Sarvam Docs File Retrieval with search_term: "${search_term}", doc_area: "${doc_area}"`);
+  // console.log(`Executing Sarvam Docs File Retrieval with search_term: "${search_term}", doc_area: "${doc_area}"`); // MCP: Potentially noisy
 
   // Context check, though not used for fs ops here, it's good practice if other internal calls were to be made.
   if (!context) {
-    console.warn('Warning: Tool execution context was not provided. This tool might rely on it for other operations.');
+    // console.warn('Warning: Tool execution context was not provided. This tool might rely on it for other operations.'); // MCP: Potentially noisy
   }
 
   // --- MODIFIED PATH RESOLUTION --- 
@@ -46,12 +46,12 @@ const executeSarvamDocsFileRetrieval = async ({ search_term, doc_area }, context
     }
   }
 
-  console.log('Searching in absolute paths:', searchPaths);
+  // console.log('Searching in absolute paths:', searchPaths); // MCP: Potentially noisy
 
   for (const absoluteDocPath of searchPaths) {
     try {
       if (!fs.existsSync(absoluteDocPath) || !fs.lstatSync(absoluteDocPath).isDirectory()){
-        console.warn(`Search path ${absoluteDocPath} does not exist or is not a directory. Skipping.`);
+        // console.warn(`Search path ${absoluteDocPath} does not exist or is not a directory. Skipping.`); // MCP: Potentially noisy
         continue;
       }
       const filesInDir = fs.readdirSync(absoluteDocPath);
@@ -85,7 +85,7 @@ const executeSarvamDocsFileRetrieval = async ({ search_term, doc_area }, context
     };
   }
   const uniqueCandidateFiles = [...new Set(allCandidateFiles)];
-  console.log('Unique candidate .md files (relative to docs root):', uniqueCandidateFiles);
+  // console.log('Unique candidate .md files (relative to docs root):', uniqueCandidateFiles); // MCP: Potentially noisy
 
   const normalizedSearchTerm = search_term.toLowerCase().trim();
   let bestMatch = null;
@@ -101,13 +101,13 @@ const executeSarvamDocsFileRetrieval = async ({ search_term, doc_area }, context
     const exactMatchByPath = uniqueCandidateFiles.find(fileRelToDocs => fileRelToDocs.toLowerCase() === normalizedSearchTerm || fileRelToDocs.toLowerCase().endsWith(`/${normalizedSearchTerm}`));
     if (exactMatchByPath) {
       bestMatch = { file: exactMatchByPath, score: Infinity, type: 'exact_filename_match' }; 
-      console.log('Found exact filename match (relative to docs root):', bestMatch.file);
+      // console.log('Found exact filename match (relative to docs root):', bestMatch.file); // MCP: Potentially noisy
     } else {
         const justTheFilename = normalizedSearchTerm.substring(normalizedSearchTerm.lastIndexOf('/') + 1);
         const exactMatchBySimpleName = uniqueCandidateFiles.find(fileRelToDocs => path_module.basename(fileRelToDocs).toLowerCase() === justTheFilename);
         if (exactMatchBySimpleName){
             bestMatch = { file: exactMatchBySimpleName, score: Infinity, type: 'exact_filename_match' }; 
-            console.log('Found exact filename match (by simple name, relative to docs root):', bestMatch.file);
+            // console.log('Found exact filename match (by simple name, relative to docs root):', bestMatch.file); // MCP: Potentially noisy
         }
     }
   }
@@ -141,14 +141,14 @@ const executeSarvamDocsFileRetrieval = async ({ search_term, doc_area }, context
 
     if (scoredFiles.length > 0) {
       bestMatch = scoredFiles[0];
-      console.log('Top filename/path keyword match (relative to docs root):', bestMatch.file, 'Score:', bestMatch.score);
+      // console.log('Top filename/path keyword match (relative to docs root):', bestMatch.file, 'Score:', bestMatch.score); // MCP: Potentially noisy
     }
   }  
 
   // Strategy 3: Keyword matching in file content 
   const weakFilenameMatchScore = 20;
   if (!bestMatch || bestMatch.score < weakFilenameMatchScore) {
-    console.log('Filename match was weak or non-existent, proceeding to content search.');
+    // console.log('Filename match was weak or non-existent, proceeding to content search.'); // MCP: Potentially noisy
     let contentScoredFiles = [];
     const filesToSearchContent = bestMatch ? [bestMatch.file, ...uniqueCandidateFiles.filter(f => f !== bestMatch.file)] : uniqueCandidateFiles;
 
@@ -156,7 +156,7 @@ const executeSarvamDocsFileRetrieval = async ({ search_term, doc_area }, context
       try {
         const absoluteFilePath = path_module.join(docsRootDir, fileRelToDocs); // Path relative to docsRootDir
         if (!fs.existsSync(absoluteFilePath)) {
-            console.warn(`Content search: File ${absoluteFilePath} not found, skipping.`);
+            // console.warn(`Content search: File ${absoluteFilePath} not found, skipping.`); // MCP: Potentially noisy
             continue;
         }
 
@@ -179,7 +179,7 @@ const executeSarvamDocsFileRetrieval = async ({ search_term, doc_area }, context
             contentScoredFiles.push({ file: fileRelToDocs, score: existingScore + contentScore, type: 'content_match' });
         }
       } catch (err) {
-        console.warn(`Could not read or score content for ${fileRelToDocs}: ${err.message}`);
+        // console.warn(`Could not read or score content for ${fileRelToDocs}: ${err.message}`); // MCP: Potentially noisy
       }
     }
 
@@ -188,14 +188,14 @@ const executeSarvamDocsFileRetrieval = async ({ search_term, doc_area }, context
         const topContentMatch = contentScoredFiles[0];
         if (!bestMatch || topContentMatch.score > bestMatch.score) {
             bestMatch = topContentMatch;
-            console.log('Top content match selected (relative to docs root):', bestMatch.file, 'Score:', bestMatch.score);
+            // console.log('Top content match selected (relative to docs root):', bestMatch.file, 'Score:', bestMatch.score); // MCP: Potentially noisy
         }
     }
   }
 
   if (!bestMatch && uniqueCandidateFiles.length === 1 && normalizedSearchTerm.length > 0) {
       bestMatch = { file: uniqueCandidateFiles[0], score: 1, type: 'single_candidate_fallback' }; 
-      console.log('Only one candidate file and no strong matches, selecting it as a fallback (relative to docs root):', bestMatch.file);
+      // console.log('Only one candidate file and no strong matches, selecting it as a fallback (relative to docs root):', bestMatch.file); // MCP: Potentially noisy
   }
   
   if (!bestMatch) {
@@ -218,7 +218,7 @@ const executeSarvamDocsFileRetrieval = async ({ search_term, doc_area }, context
     }
     retrievedFileContent = fs.readFileSync(absoluteBestMatchPath, 'utf-8');
     statusMessage = `Successfully retrieved documentation file: ${bestMatch.file} (relative to docs root)`;
-    console.log('Successfully read file:', bestMatch.file);
+    // console.log('Successfully read file:', bestMatch.file); // MCP: Potentially noisy
 
   } catch (error) {
     console.error(`Error reading file ${bestMatch.file} (at ${absoluteBestMatchPath}):`, error.message);
