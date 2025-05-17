@@ -87,8 +87,44 @@ async function run() {
       }
     }
 
+    // Prepare a context for the tool to call other tools
+    const toolExecutionContext = {
+      callTool: async (targetToolName, targetToolArgs) => {
+        console.log(`[Internal Tool Call] Attempting to call ${targetToolName} with args:`, targetToolArgs);
+        const targetTool = tools.find((t) => t.definition.function.name === targetToolName);
+        if (!targetTool) {
+          console.error(`[Internal Tool Call Error] Tool not found: ${targetToolName}`);
+          // This kind of error should ideally not be directly sent to the original client as an McpError
+          // if it implies an internal server misconfiguration or bad tool design.
+          // Instead, the calling tool should handle this gracefully.
+          // For now, we'll throw an error that the calling tool can catch.
+          throw new Error(`Internal: Target tool ${targetToolName} not found.`);
+        }
+        
+        // Note: This is a direct call to the function. 
+        // It bypasses the main server's request/response schema validation for this internal call.
+        // It assumes that the arguments are already in the correct format expected by the targetTool.function.
+        // The context is passed along for potentially deeper nested calls.
+        try {
+          // Assuming targetTool.function now accepts (args, context)
+          const result = await targetTool.function(targetToolArgs, toolExecutionContext);
+          // The result here is the direct return value of the targetTool's function.
+          // It's NOT the full McpResponse structure.
+          console.log(`[Internal Tool Call] Result from ${targetToolName}:`, result);
+          return result; 
+        } catch (internalError) {
+          console.error(`[Internal Tool Call Error] Error during execution of ${targetToolName}:`, internalError);
+          // Propagate the error so the calling tool can decide how to handle it.
+          // It might be an McpError if the target tool threw one, or a generic Error.
+          throw internalError; 
+        }
+      }
+    };
+
     try {
-      const result = await tool.function(args);
+      // Ensure your tool functions are defined to accept this second parameter (context)
+      // e.g., const executeSomeFunction = async (args, context) => { ... }
+      const result = await tool.function(args, toolExecutionContext);
       return {
         content: [
           {
@@ -98,10 +134,14 @@ async function run() {
         ],
       };
     } catch (error) {
-      console.error("[Error] Failed to fetch data:", error);
+      console.error(`[Error] Failed to execute tool ${toolName}:`, error);
+      if (error instanceof McpError) { // Re-throw McpErrors directly
+        throw error;
+      }
+      // Wrap other errors in McpError.InternalError
       throw new McpError(
         ErrorCode.InternalError,
-        `API error: ${error.message}`
+        `Tool execution failed: ${error.message}`
       );
     }
   });

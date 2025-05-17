@@ -7,4 +7,5 @@ export const toolPaths = [
   'sarvam-api/sarvam-ap-is/language-identification.js',
   'sarvam-api/sarvam-ap-is/text-analytics.js',
   'sarvam-api/sarvam-ap-is/transliterate-text.js',
+  'sarvam-api/sarvam-ap-is/sarvam-docs-file-retriever.js'
 ];
