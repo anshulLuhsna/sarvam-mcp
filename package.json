@@ -20,6 +20,7 @@
     "lib/",
     "tools/",
     "commands/",
+    "docs/",
     "README.md",
     "LICENSE"
   ],
