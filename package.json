@@ -1,23 +1,59 @@
 {
-  "name": "postman-agent-generator-mcp",
-  "version": "1.0.0",
-  "description": "A simple MCP server with packaged tools",
-  "main": "index.js",
+  "name": "sarvam-mcp",
+  "version": "0.1.0",
+  "description": "An MCP server exposing Sarvam AI tools and a documentation retriever.",
+  "main": "mcpServer.js",
   "type": "module",
-  "scripts": {
-    "list-tools": "node index.js tools"
+  "bin": {
+    "sarvam-mcp": "./mcpServer.js",
+    "sarvam-mcp-cli": "./index.js"
   },
+  "scripts": {
+    "start": "node mcpServer.js",
+    "start:sse": "node mcpServer.js --sse",
+    "list-tools": "node index.js tools",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "files": [
+    "mcpServer.js",
+    "index.js",
+    "lib/",
+    "tools/",
+    "commands/",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anshulLuhsna/sarvam-mcp.git"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "sarvam",
+    "ai",
+    "tools",
+    "api-server",
+    "language",
+    "speech",
+    "documentation"
+  ],
+  "author": "Anshul Kalbande",
+  "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.9.0",
     "commander": "^13.1.0",
     "dotenv": "^16.4.7",
     "express": "^5.1.0",
+    "form-data": "^4.0.0",
     "node-fetch": "^3.3.2",
     "sarvamai": "^0.1.1"
   },
   "engines": {
     "node": ">=16.0.0"
   },
-  "author": "Postman, Inc.",
-  "license": "MIT"
+  "bugs": {
+    "url": "https://github.com/anshulLuhsna/sarvam-mcp/issues"
+  },
+  "homepage": "https://github.com/anshulLuhsna/sarvam-mcp#readme"
 }
