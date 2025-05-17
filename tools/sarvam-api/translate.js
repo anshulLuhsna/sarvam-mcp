@@ -1,6 +1,20 @@
 import { SarvamAIClient } from 'sarvamai';
 
 /**
+ * Maps generic language codes to specific regional codes.
+ * @param {string} langCode - The input language code.
+ * @returns {string} - The mapped language code.
+ */
+const mapLanguageCode = (langCode) => {
+  if (typeof langCode !== 'string') return langCode;
+  const lowerLangCode = langCode.toLowerCase();
+  if (lowerLangCode === 'en') return 'en-IN';
+  if (lowerLangCode === 'hi') return 'hi-IN';
+  // Add other mappings as needed
+  return langCode; // Return original if no mapping found
+};
+
+/**
  * Function to translate text using the Sarvam API.
  *
  * @param {Object} args - Arguments for the translation.
@@ -15,16 +29,19 @@ import { SarvamAIClient } from 'sarvamai';
  */
 const executeFunction = async ({ input, source_language_code = 'en-IN', target_language_code = 'hi-IN', speaker_gender = 'Male', mode = 'formal', model = 'mayura:v1', enable_preprocessing = true }) => {
   const baseUrl = 'https://api.sarvam.ai/translate';
-  const apiKey = process.env.SARVAM_API_API_KEY;
+  const apiKey = process.env.SARVAM_API_KEY;
   try {
     const client = new SarvamAIClient({
       apiSubscriptionKey: apiKey
     });
 
+    const final_source_language_code = mapLanguageCode(source_language_code);
+    const final_target_language_code = mapLanguageCode(target_language_code);
+
     const params = {
       input: input,
-      source_language_code,
-      target_language_code
+      source_language_code: final_source_language_code,
+      target_language_code: final_target_language_code
     };
 
     if (speaker_gender !== undefined) params.speaker_gender = speaker_gender;

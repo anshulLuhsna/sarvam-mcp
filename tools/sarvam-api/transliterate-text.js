@@ -1,6 +1,20 @@
 import fetch from 'node-fetch';
 
 /**
+ * Maps generic language codes to specific regional codes.
+ * @param {string} langCode - The input language code.
+ * @returns {string} - The mapped language code.
+ */
+const mapLanguageCode = (langCode) => {
+  if (typeof langCode !== 'string') return langCode;
+  const lowerLangCode = langCode.toLowerCase();
+  if (lowerLangCode === 'en') return 'en-IN';
+  if (lowerLangCode === 'hi') return 'hi-IN';
+  // Add other mappings as needed
+  return langCode; // Return original if no mapping found
+};
+
+/**
  * Function to transliterate text from one script to another using Sarvam API (via direct API call).
  *
  * @param {Object} args - Arguments for the transliteration.
@@ -23,6 +37,9 @@ const executeFunction = async ({
   const apiKey = process.env.SARVAM_API_KEY;
   const baseUrl = 'https://api.sarvam.ai/transliterate';
 
+  const final_source_language_code = mapLanguageCode(source_language_code);
+  const final_target_language_code = mapLanguageCode(target_language_code);
+
   if (!apiKey) {
     console.error('SARVAM_API_KEY environment variable is not set');
     return {
@@ -31,11 +48,11 @@ const executeFunction = async ({
     };
   }
 
-  if (!input_text || !source_language_code || !target_language_code) {
+  if (!input_text || !final_source_language_code || !final_target_language_code) {
     let missingParams = [];
     if (!input_text) missingParams.push('input_text');
-    if (!source_language_code) missingParams.push('source_language_code');
-    if (!target_language_code) missingParams.push('target_language_code');
+    if (!final_source_language_code) missingParams.push('source_language_code');
+    if (!final_target_language_code) missingParams.push('target_language_code');
     return {
       error: `Missing required parameter(s): ${missingParams.join(', ')}`,
       details: 'input_text, source_language_code, and target_language_code are required.'
@@ -50,8 +67,8 @@ const executeFunction = async ({
 
     const payload = {
       input: input_text,
-      source_language_code: source_language_code,
-      target_language_code: target_language_code
+      source_language_code: final_source_language_code,
+      target_language_code: final_target_language_code
     };
 
     if (numerals_format !== undefined) payload.numerals_format = numerals_format;

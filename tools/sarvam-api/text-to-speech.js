@@ -3,6 +3,20 @@ import path from 'path';
 import { SarvamAIClient } from 'sarvamai';
 
 /**
+ * Maps generic language codes to specific regional codes.
+ * @param {string} langCode - The input language code.
+ * @returns {string} - The mapped language code.
+ */
+const mapLanguageCode = (langCode) => {
+  if (typeof langCode !== 'string') return langCode;
+  const lowerLangCode = langCode.toLowerCase();
+  if (lowerLangCode === 'en') return 'en-IN';
+  if (lowerLangCode === 'hi') return 'hi-IN';
+  // Add other mappings as needed
+  return langCode; // Return original if no mapping found
+};
+
+/**
  * Function to convert text inputs to speech using Sarvam API (via official SDK).
  *
  * @param {Object} args - Arguments for the text-to-speech conversion.
@@ -47,9 +61,11 @@ const executeFunction = async ({
       apiSubscriptionKey: apiKey
     });
 
+    const final_target_language_code = mapLanguageCode(target_language_code);
+
     const response = await client.textToSpeech.convert({
       text: inputs,
-      target_language_code,
+      target_language_code: final_target_language_code,
       speaker,
       pitch,
       pace,

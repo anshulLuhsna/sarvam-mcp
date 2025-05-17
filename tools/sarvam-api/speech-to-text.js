@@ -4,6 +4,20 @@ import FormData from 'form-data';
 import path from 'path';
 
 /**
+ * Maps generic language codes to specific regional codes.
+ * @param {string} langCode - The input language code.
+ * @returns {string} - The mapped language code.
+ */
+const mapLanguageCode = (langCode) => {
+  if (typeof langCode !== 'string') return langCode;
+  const lowerLangCode = langCode.toLowerCase();
+  if (lowerLangCode === 'en') return 'en-IN';
+  if (lowerLangCode === 'hi') return 'hi-IN';
+  // Add other mappings as needed
+  return langCode; // Return original if no mapping found
+};
+
+/**
  * Function to transcribe audio input to text using Sarvam's speech-to-text models.
  *
  * @param {Object} args - Arguments for the transcription.
@@ -17,6 +31,8 @@ const executeFunction = async ({ language_code, model, file, save_response = fal
   const baseUrl = 'https://api.sarvam.ai/speech-to-text';
   const apiKey = process.env.SARVAM_API_KEY;
 
+  const final_language_code = mapLanguageCode(language_code);
+
   try {
     // Check if file exists and is readable
     try {
@@ -27,7 +43,7 @@ const executeFunction = async ({ language_code, model, file, save_response = fal
     }
 
     const formData = new FormData();
-    formData.append('language_code', language_code);
+    formData.append('language_code', final_language_code);
     formData.append('model', model);
     formData.append('file', fs.createReadStream(file));
 
