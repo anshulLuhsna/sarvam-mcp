@@ -27,7 +27,7 @@ const mapLanguageCode = (langCode) => {
  * @param {boolean} [args.save_response=false] - Whether to save the response to a file.
  * @returns {Promise<Object>} - The result of the transcription.
  */
-const executeFunction = async ({ language_code, model, file, save_response = false }) => {
+const executeFunction = async ({ language_code, model = 'saarika:v2', file, save_response = false }) => {
   const baseUrl = 'https://api.sarvam.ai/speech-to-text';
   const apiKey = process.env.SARVAM_API_KEY;
 
@@ -109,11 +109,12 @@ const apiTool = {
         properties: {
           language_code: {
             type: 'string',
-            description: 'The language code of the audio input.'
+            description: 'The language code of the audio input (e.g., "hi", "en", "hi-IN"). Generic codes will be mapped to specific regional codes like "hi-IN" or "en-IN".'
           },
           model: {
             type: 'string',
-            description: 'The model to use for transcription.'
+            description: 'The model to use for transcription. Defaults to "saarika:v1".',
+            default: 'saarika:v1'
           },
           file: {
             type: 'string',
@@ -124,7 +125,7 @@ const apiTool = {
             description: 'Whether to save the response to a file.'
           }
         },
-        required: ['language_code', 'model', 'file']
+        required: ['language_code', 'file']
       }
     }
   }
