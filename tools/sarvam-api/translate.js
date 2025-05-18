@@ -1,5 +1,5 @@
 import { SarvamAIClient } from 'sarvamai';
-import { mapLanguageCode } from '../../lib/lang-utils.js';
+import { mapLanguageCode as defaultMapLanguageCode } from '../../lib/lang-utils.js';
 
 /**
  * Function to translate text using the Sarvam API.
@@ -12,18 +12,34 @@ import { mapLanguageCode } from '../../lib/lang-utils.js';
  * @param {string} [args.mode="formal"] - The mode of translation.
  * @param {string} [args.model="mayura:v1"] - The model to be used for translation.
  * @param {boolean} [args.enable_preprocessing=true] - Whether to enable preprocessing.
+ * @param {Object} [dependencies] - Optional dependencies for testing.
+ * @param {Function} [dependencies.mapLangFunc=defaultMapLanguageCode] - Language code mapping function.
  * @returns {Promise<Object>} - The result of the translation.
  */
-const executeFunction = async ({ input, source_language_code = 'en-IN', target_language_code = 'hi-IN', speaker_gender = 'Male', mode = 'formal', model = 'mayura:v1', enable_preprocessing = true }) => {
-  const baseUrl = 'https://api.sarvam.ai/translate';
+export const executeFunctionInternal = async (
+  { input, source_language_code = 'en-IN', target_language_code = 'hi-IN', speaker_gender = 'Male', mode = 'formal', model = 'mayura:v1', enable_preprocessing = true },
+  dependencies = {}
+) => {
+  const { mapLangFunc = defaultMapLanguageCode } = dependencies;
   const apiKey = process.env.SARVAM_API_KEY;
+  // Removed baseUrl as it's not used when SDK is used correctly.
+
+  // It seems the original code was missing an API Key check before client instantiation
+  if (!apiKey) {
+    console.error('SARVAM_API_KEY environment variable is not set for SarvamAIClient');
+    return {
+      error: 'SARVAM_API_KEY environment variable is not set',
+      details: 'Please make sure you have set the SARVAM_API_KEY environment variable.'
+    };
+  }
+
   try {
     const client = new SarvamAIClient({
       apiSubscriptionKey: apiKey
     });
 
-    const final_source_language_code = mapLanguageCode(source_language_code);
-    const final_target_language_code = mapLanguageCode(target_language_code);
+    const final_source_language_code = mapLangFunc(source_language_code);
+    const final_target_language_code = mapLangFunc(target_language_code);
 
     const params = {
       input: input,
@@ -36,35 +52,15 @@ const executeFunction = async ({ input, source_language_code = 'en-IN', target_l
     if (model !== undefined) params.model = model;
     if (enable_preprocessing !== undefined) params.enable_preprocessing = enable_preprocessing;
 
-    // const response = await client.translateText.translate(params);
-    // Assuming the method might be directly on the client or a more general sub-client
-    // Option 1: Directly on client
-    // const response = await client.translate(params); 
-    // Option 2: Or if translateText is the correct object, but method name is different (less likely given error)
-
-    // Let's try to find a translate method on the client object directly, 
-    // or on a more general 'text' or 'translation' service if they exist.
-    // Given the previous error, client.translateText itself is undefined.
-    // We need to find out what IS defined on client that looks like translation.
-
-    // For now, trying the most direct approach if such a method exists on the client itself.
-    // This is a common pattern for SDKs. The Sarvam SDK documentation would clarify this definitively.
-    if (typeof client.translate === 'function') {
-      const response = await client.translate(params);
-      return response;
-    } else if (client.text && typeof client.text.translate === 'function') {
-      // Alternative: if there's a general 'text' service
+    // Assuming client.text.translate is the correct SDK path based on previous successful tests
+    if (client.text && typeof client.text.translate === 'function') {
       const response = await client.text.translate(params);
       return response;
-    } else if (client.translation && typeof client.translation.translate === 'function') {
-      // Alternative: if there's a general 'translation' service
-      const response = await client.translation.translate(params);
-      return response;
     } else {
-      console.error('Sarvam SDK translate method not found on client, client.text, or client.translation');
+      console.error('Sarvam SDK translate method not found on client.text.translate');
       return {
         error: 'Sarvam SDK translate method not found',
-        details: 'Could not find a translate method on the SarvamAIClient instance. Please check SDK documentation.'
+        details: 'Could not find a translate method on the SarvamAIClient instance at client.text.translate. Please check SDK documentation.'
       };
     }
 
@@ -73,11 +69,10 @@ const executeFunction = async ({ input, source_language_code = 'en-IN', target_l
     let errorDetails = error.toString();
     if (error instanceof Error && error.message) {
       errorDetails = error.message;
-    } else if (typeof error === 'object' && error !== null) {
-      // Attempt to get more details if it's an object, e.g. from SDK error responses
+    } else if (typeof error === 'object' && error !== null && !(error instanceof Error)) {
       errorDetails = JSON.stringify(error, Object.getOwnPropertyNames(error));
-      if (errorDetails === '{}') { // If basic stringify fails, try just message or stack
-          errorDetails = error.message || error.stack || 'No further details available after stringify.';
+      if (errorDetails === '{}') { 
+          errorDetails = error.toString() || 'No further details available after stringify.';
       }
     }
     return {
@@ -92,7 +87,12 @@ const executeFunction = async ({ input, source_language_code = 'en-IN', target_l
  * @type {Object}
  */
 const apiTool = {
-  function: executeFunction,
+  function: async (args, context) => {
+    // The context object (second arg) is passed by the MCP server, not directly by user tests for this parameter.
+    // For testing executeFunctionInternal, we pass dependencies directly.
+    // For apiTool.function, we call executeFunctionInternal without the dependencies arg.
+    return executeFunctionInternal(args); 
+  },
   definition: {
     type: 'function',
     function: {
