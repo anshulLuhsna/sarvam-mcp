@@ -2,20 +2,7 @@ import fetch from 'node-fetch';
 import fs from 'fs';
 import FormData from 'form-data';
 import path from 'path';
-
-/**
- * Maps generic language codes to specific regional codes.
- * @param {string} langCode - The input language code.
- * @returns {string} - The mapped language code.
- */
-const mapLanguageCode = (langCode) => {
-  if (typeof langCode !== 'string') return langCode;
-  const lowerLangCode = langCode.toLowerCase();
-  if (lowerLangCode === 'en') return 'en-IN';
-  if (lowerLangCode === 'hi') return 'hi-IN';
-  // Add other mappings as needed
-  return langCode; // Return original if no mapping found
-};
+import { mapLanguageCode } from '../../lib/lang-utils.js';
 
 /**
  * Function to transcribe audio input to text using Sarvam's speech-to-text models.
