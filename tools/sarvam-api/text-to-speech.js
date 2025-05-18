@@ -21,10 +21,10 @@ const mapLanguageCode = (langCode) => {
  *
  * @param {Object} args - Arguments for the text-to-speech conversion.
  * @param {string} args.inputs - The text input(s) to be converted to speech.
- * @param {string} [args.target_language_code="hi-IN"] - The target language code for the speech.
+ * @param {string} [args.target_language_code="en-IN"] - The target language code for the speech.
  * @param {string} [args.speaker="meera"] - The speaker\'s name for the voice.
  * @param {number} [args.pitch=0] - The pitch of the speech.
- * @param {number} [args.pace=1.65] - The pace of the speech.
+ * @param {number} [args.pace=1.0] - The pace of the speech.
  * @param {number} [args.loudness=1.5] - The loudness of the speech.
  * @param {number} [args.speech_sample_rate=8000] - The sample rate for the speech.
  * @param {boolean} [args.enable_preprocessing=true] - Whether to enable preprocessing.
@@ -35,14 +35,14 @@ const mapLanguageCode = (langCode) => {
  */
 const executeFunction = async ({
   inputs,
-  target_language_code = 'hi-IN',
+  target_language_code = 'en-IN',
   speaker = 'meera',
   pitch = 0,
-  pace = 1.65,
+  pace = 1.0,
   loudness = 1.5,
   speech_sample_rate = 8000,
   enable_preprocessing = true,
-  model = 'bulbul:v1',
+  model = 'bulbul:v2',
   output_path,
   save_response
 }) => {
