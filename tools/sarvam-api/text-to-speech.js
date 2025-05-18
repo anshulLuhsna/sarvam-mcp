@@ -22,7 +22,7 @@ const mapLanguageCode = (langCode) => {
  * @param {Object} args - Arguments for the text-to-speech conversion.
  * @param {string} args.inputs - The text input(s) to be converted to speech.
  * @param {string} [args.target_language_code="en-IN"] - The target language code for the speech.
- * @param {string} [args.speaker="meera"] - The speaker\'s name for the voice.
+ * @param {string} [args.speaker="anushka"] - The speaker\'s name for the voice.
  * @param {number} [args.pitch=0] - The pitch of the speech.
  * @param {number} [args.pace=1.0] - The pace of the speech.
  * @param {number} [args.loudness=1.5] - The loudness of the speech.
@@ -36,7 +36,7 @@ const mapLanguageCode = (langCode) => {
 const executeFunction = async ({
   inputs,
   target_language_code = 'en-IN',
-  speaker = 'meera',
+  speaker = 'anushka',
   pitch = 0,
   pace = 1.0,
   loudness = 1.5,
