@@ -88,10 +88,51 @@ const executeSarvamDocsFileRetrieval = async ({ search_term, doc_area }, context
 
   const normalizedSearchTerm = search_term.toLowerCase().trim();
   let bestMatch = null;
-  const searchKeywords = normalizedSearchTerm.split(/\s+/).filter(k => k.length > 0);
-  if (searchKeywords.length === 0 && normalizedSearchTerm.length > 0) {
-      searchKeywords.push(normalizedSearchTerm);
+
+  // --- MODIFICATION START: Enhanced Keyword Processing & Core Term Identification ---
+  const coreTechTerms = ["text-to-speech", "speech-to-text", "call-analytics", "transliterate", "translate", "language-identification", "tts", "stt"]; // Example core terms/acronyms
+  let searchKeywords = [];
+  let coreSearchKeywords = [];
+  let secondarySearchKeywords = [];
+
+  const lowerCaseSearchTerm = normalizedSearchTerm; // Already lowercased and trimmed
+
+  // Identify core terms present in the search query
+  for (const coreTerm of coreTechTerms) {
+    if (lowerCaseSearchTerm.includes(coreTerm)) {
+      coreSearchKeywords.push(coreTerm);
+    }
   }
+
+  // Create a regex to split by spaces or by core terms to preserve them
+  let splitRegex;
+  if (coreSearchKeywords.length > 0) {
+    // Escape core keywords for regex and join with | to split by them but keep them
+    const escapedCoreKeywords = coreSearchKeywords.map(kw => kw.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&'));
+    // Regex to split by space or capture core keywords
+    // This will result in an array that includes the core keywords as separate elements,
+    // and parts of the string split by these keywords or spaces.
+    splitRegex = new RegExp(`(${escapedCoreKeywords.join('|')})|\\s+`, 'g');
+    searchKeywords = lowerCaseSearchTerm.split(splitRegex).filter(k => k && k.trim().length > 0);
+
+  } else {
+    searchKeywords = lowerCaseSearchTerm.split(/\s+/).filter(k => k && k.trim().length > 0);
+  }
+  
+  // Refine searchKeywords: remove duplicates and assign to core/secondary
+  const uniqueSearchKeywords = [...new Set(searchKeywords)];
+  secondarySearchKeywords = uniqueSearchKeywords.filter(k => !coreSearchKeywords.includes(k) && k.length > 1); // Avoid single characters as secondary unless part of a core term
+
+  if (coreSearchKeywords.length === 0 && secondarySearchKeywords.length === 0 && lowerCaseSearchTerm.length > 0) {
+    secondarySearchKeywords.push(lowerCaseSearchTerm); // Fallback for terms not matching core/secondary logic
+  }
+
+  // console.log('Original Search Term:', normalizedSearchTerm);
+  // console.log('Core Search Keywords:', coreSearchKeywords);
+  // console.log('Secondary Search Keywords:', secondarySearchKeywords);
+
+  // --- END MODIFICATION ---
+
 
   // --- File Selection Logic (paths are relative to docsRootDir) ---
 
@@ -115,23 +156,60 @@ const executeSarvamDocsFileRetrieval = async ({ search_term, doc_area }, context
   if (!bestMatch) {
     let scoredFiles = uniqueCandidateFiles.map(fileRelToDocs => {
       const filename = path_module.basename(fileRelToDocs).toLowerCase();
+      const filePath = fileRelToDocs.toLowerCase();
       let score = 0;
-      for (const keyword of searchKeywords) {
+      let matchDebug = [];
+
+      // Increased weight for core keywords
+      for (const keyword of coreSearchKeywords) {
         if (filename.includes(keyword)) {
-          score += 10; 
+          score += 30; // Higher score for core keyword in filename
+          matchDebug.push(`core_fn: ${keyword}`);
+        }
+        if (filePath.includes(keyword) && !filename.includes(keyword)) { // in path but not filename
+          score += 15; // Medium score for core keyword in path
+          matchDebug.push(`core_path: ${keyword}`);
         }
       }
-      if (!normalizedSearchTerm.endsWith('.md') && filename.includes(normalizedSearchTerm)) {
-        score += 20 * searchKeywords.length; 
+
+      for (const keyword of secondarySearchKeywords) {
+        if (filename.includes(keyword)) {
+          score += 10; // Standard score for secondary keyword in filename
+          matchDebug.push(`sec_fn: ${keyword}`);
+        }
+        if (filePath.includes(keyword) && !filename.includes(keyword)) { // in path but not filename
+          score += 5; // Lower score for secondary keyword in path
+          matchDebug.push(`sec_path: ${keyword}`);
+        }
       }
-      const pathParts = fileRelToDocs.split('/').slice(0, -1); // directory parts
-      for (const part of pathParts) {
-          for (const keyword of searchKeywords) {
-              if (part.toLowerCase().includes(keyword)) {
-                  score +=5; 
-              }
+      
+      // Bonus for filename directly containing a large part of the original search term (normalized)
+      // e.g. search "text to speech api", filename "text-to-speech.md"
+      if (!normalizedSearchTerm.endsWith('.md')) {
+          let directHitBonus = 0;
+          if (filename.replace(/\.md$/, "").includes(normalizedSearchTerm.replace(/\s+/g, "-"))) { // e.g. tts-integration matches tts integration
+            directHitBonus = 25 * (coreSearchKeywords.length + 1); // Higher bonus if core terms involved
+            matchDebug.push(`direct_hit_normalized: ${normalizedSearchTerm.replace(/\s+/g, "-")}`);
+          } else if (filename.includes(normalizedSearchTerm)) { // Less likely for multi-word, but possible
+            directHitBonus = 20 * (coreSearchKeywords.length + 1);
+            matchDebug.push(`direct_hit_raw: ${normalizedSearchTerm}`);
           }
+          score += directHitBonus;
       }
+
+
+      // Proximity bonus for core keywords in filename (simple version)
+      if (coreSearchKeywords.length > 1) {
+        let coreKeywordsInFilename = coreSearchKeywords.filter(kw => filename.includes(kw));
+        if (coreKeywordsInFilename.length === coreSearchKeywords.length) { // All core keywords present
+            score += 20; 
+            matchDebug.push('all_core_fn_present');
+        } else if (coreKeywordsInFilename.length > 1) {
+            score += 10 * coreKeywordsInFilename.length; // Bonus for multiple core keywords
+            matchDebug.push('multiple_core_fn_present');
+        }
+      }
+      // console.log(`File: ${fileRelToDocs}, Score: ${score}, Debug: ${matchDebug.join(', ')}`);
       return { file: fileRelToDocs, score, type: 'keyword_filename_path_match' };
     });
 
@@ -145,7 +223,7 @@ const executeSarvamDocsFileRetrieval = async ({ search_term, doc_area }, context
   }  
 
   // Strategy 3: Keyword matching in file content 
-  const weakFilenameMatchScore = 20;
+  const weakFilenameMatchScore = 40; // Adjusted threshold
   if (!bestMatch || bestMatch.score < weakFilenameMatchScore) {
     // console.log('Filename match was weak or non-existent, proceeding to content search.');
     let contentScoredFiles = [];
@@ -161,21 +239,81 @@ const executeSarvamDocsFileRetrieval = async ({ search_term, doc_area }, context
 
         const fileContent = fs.readFileSync(absoluteFilePath, 'utf-8').toLowerCase();
         let contentScore = 0;
-        for (const keyword of searchKeywords) {
+        let contentMatchDebug = [];
+
+        // Extract titles/headings (lines starting with #)
+        const headings = fileContent.split('\\n').filter(line => line.startsWith('#')).map(line => line.replace(/#/g, '').trim());
+
+        for (const keyword of coreSearchKeywords) {
           if (fileContent.includes(keyword)) {
-            contentScore += 1;
+            contentScore += 10; // Higher base score for core keyword in content
+            contentMatchDebug.push(`core_content: ${keyword}`);
+          }
+          for (const heading of headings) {
+            if (heading.includes(keyword)) {
+              contentScore += 25; // Significant bonus for core keyword in heading
+              contentMatchDebug.push(`core_heading: ${keyword}`);
+            }
           }
         }
-        if (fileContent.includes(normalizedSearchTerm)) {
-          contentScore += 5 * searchKeywords.length;
+
+        for (const keyword of secondarySearchKeywords) {
+          if (fileContent.includes(keyword)) {
+            contentScore += 2; // Standard score for secondary keyword
+            contentMatchDebug.push(`sec_content: ${keyword}`);
+          }
+          for (const heading of headings) {
+            if (heading.includes(keyword)) {
+              contentScore += 5; // Bonus for secondary keyword in heading
+              contentMatchDebug.push(`sec_heading: ${keyword}`);
+            }
+          }
         }
+        
+        // Bonus for the full normalized search term appearing in content
+        if (fileContent.includes(normalizedSearchTerm)) {
+          contentScore += 15 * (coreSearchKeywords.length + 1); // Weighted by core keyword presence
+          contentMatchDebug.push(`full_term_content: ${normalizedSearchTerm}`);
+        }
+        for (const heading of headings) {
+            if (heading.includes(normalizedSearchTerm)) {
+                contentScore += 30 * (coreSearchKeywords.length +1); // Large bonus for full term in heading
+                contentMatchDebug.push(`full_term_heading: ${normalizedSearchTerm}`);
+            }
+        }
+
+        // Simple proximity: if multiple core keywords are present in the content
+        if (coreSearchKeywords.length > 1) {
+            const coreKeywordsInContent = coreSearchKeywords.filter(kw => fileContent.includes(kw));
+            if (coreKeywordsInContent.length === coreSearchKeywords.length) {
+                contentScore += 20;
+                contentMatchDebug.push('all_core_content_present');
+            } else if (coreKeywordsInContent.length > 0) {
+                contentScore += 5 * coreKeywordsInContent.length;
+                contentMatchDebug.push('multiple_core_content_present');
+            }
+        }
+        
+        // console.log(`Content File: ${fileRelToDocs}, Content Score: ${contentScore}, Debug: ${contentMatchDebug.join(', ')}`);
 
         if (contentScore > 0) {
             let existingScore = 0;
+            let previousMatchType = 'content_only';
             if (bestMatch && fileRelToDocs === bestMatch.file) {
                 existingScore = bestMatch.score;
+                previousMatchType = bestMatch.type;
             }
-            contentScoredFiles.push({ file: fileRelToDocs, score: existingScore + contentScore, type: 'content_match' });
+            // Combine scores: Make content score influential but don't let it completely overshadow a strong filename match unless content match is very strong.
+            // If filename match was already decent, content score serves as a booster/confirmer.
+            // If filename match was weak/non-existent, content score is primary.
+            let combinedScore = existingScore;
+            if (existingScore < weakFilenameMatchScore) { // If filename match was weak
+                combinedScore += contentScore; // Add full content score
+            } else { // Filename match was decent
+                combinedScore += contentScore * 0.5; // Add a portion of content score as a booster
+            }
+            
+            contentScoredFiles.push({ file: fileRelToDocs, score: combinedScore, type: `${previousMatchType}+content_match` });
         }
       } catch (err) {
         // console.warn(`Could not read or score content for ${fileRelToDocs}: ${err.message}`);
@@ -185,14 +323,14 @@ const executeSarvamDocsFileRetrieval = async ({ search_term, doc_area }, context
     if (contentScoredFiles.length > 0) {
         contentScoredFiles.sort((a, b) => b.score - a.score);
         const topContentMatch = contentScoredFiles[0];
-        if (!bestMatch || topContentMatch.score > bestMatch.score) {
+        if (!bestMatch || topContentMatch.score > bestMatch.score || (topContentMatch.score === bestMatch.score && topContentMatch.type.includes('content'))) {
             bestMatch = topContentMatch;
-            // console.log('Top content match selected (relative to docs root):', bestMatch.file, 'Score:', bestMatch.score);
+            // console.log('Top content match selected (relative to docs root):', bestMatch.file, 'Score:', bestMatch.score, 'Type:', bestMatch.type);
         }
     }
   }
 
-  if (!bestMatch && uniqueCandidateFiles.length === 1 && normalizedSearchTerm.length > 0) {
+  if (!bestMatch && uniqueCandidateFiles.length === 1 && (coreSearchKeywords.length > 0 || secondarySearchKeywords.length >0 )) { // Ensure there was some search attempt
       bestMatch = { file: uniqueCandidateFiles[0], score: 1, type: 'single_candidate_fallback' }; 
       // console.log('Only one candidate file and no strong matches, selecting it as a fallback (relative to docs root):', bestMatch.file);
   }
